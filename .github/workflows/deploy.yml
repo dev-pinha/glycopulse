@@ -1,0 +1,115 @@
+name: Deploy Multi-Server
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  REPO_NAME: "buyglycopulse.com"
+  GIT_ALIAS: "github.com-glycopulse"
+  GIT_REPO_PATH: "dev-pinha/glycopulse.git"
+  WEB_ROOT: "/var/www"
+
+jobs:
+  deploy-server1:
+    name: Deploy to Server 1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Deploy to Server 1
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST1 }}
+          username: ${{ secrets.SERVER_USER1 }}
+          key: ${{ secrets.SERVER_KEY1 }}
+          script: |
+            set -e
+            REPO_NAME="${{ env.REPO_NAME }}"
+            GIT_ALIAS="${{ env.GIT_ALIAS }}"
+            GIT_REPO_PATH="${{ env.GIT_REPO_PATH }}"
+            WEB_DIR="${{ env.WEB_ROOT }}/${REPO_NAME}"
+            LOG_FILE="/var/log/deploy_${REPO_NAME}.log"
+            echo "Ensuring correct ownership and permissions..."
+            sudo mkdir -p "$WEB_DIR"
+            sudo chown -R ubuntu:ubuntu "$WEB_DIR" || true
+            sudo chmod -R 755 "$WEB_DIR" || true
+            git config --global --add safe.directory "$WEB_DIR"
+            if [ ! -d "$WEB_DIR/.git" ]; then
+              echo "Cloning repository..."
+              sudo rm -rf "$WEB_DIR"
+              sudo -u ubuntu git clone --branch master git@${GIT_ALIAS}:${GIT_REPO_PATH} "$WEB_DIR"
+            else
+              echo "Pulling latest changes..."
+              cd "$WEB_DIR"
+              sudo -u ubuntu git fetch origin
+              sudo -u ubuntu git checkout master
+              sudo -u ubuntu git reset --hard origin/master
+              sudo -u ubuntu git clean -fd
+            fi
+            find "$WEB_DIR" -type f -name "index.html" | while read -r htmlfile; do
+              dir="$(dirname "$htmlfile")"
+              if [ ! -f "$dir/index.php" ]; then
+                sudo cp "$htmlfile" "$dir/index.php"
+              fi
+            done
+            cd "$WEB_DIR"
+            DEPLOYED_COMMIT=$(sudo -u ubuntu git rev-parse --short HEAD || echo "unknown")
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - Deployed commit $DEPLOYED_COMMIT" | sudo tee -a "$LOG_FILE"
+            sudo chown -R www-data:www-data "$WEB_DIR"
+            sudo chmod -R 755 "$WEB_DIR"
+            sudo systemctl restart apache2 || true
+            sudo systemctl restart nginx || true
+            echo "Deployment finished (Commit: $DEPLOYED_COMMIT)"
+
+  deploy-server2:
+    name: Deploy to Server 2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Deploy to Server 2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST2 }}
+          username: ${{ secrets.SERVER_USER2 }}
+          key: ${{ secrets.SERVER_KEY2 }}
+          script: |
+            set -e
+            REPO_NAME="${{ env.REPO_NAME }}"
+            GIT_ALIAS="${{ env.GIT_ALIAS }}"
+            GIT_REPO_PATH="${{ env.GIT_REPO_PATH }}"
+            WEB_DIR="${{ env.WEB_ROOT }}/${REPO_NAME}"
+            LOG_FILE="/var/log/deploy_${REPO_NAME}.log"
+            echo "Ensuring correct ownership and permissions..."
+            sudo mkdir -p "$WEB_DIR"
+            sudo chown -R ubuntu:ubuntu "$WEB_DIR" || true
+            sudo chmod -R 755 "$WEB_DIR" || true
+            git config --global --add safe.directory "$WEB_DIR"
+            if [ ! -d "$WEB_DIR/.git" ]; then
+              echo "Cloning repository..."
+              sudo rm -rf "$WEB_DIR"
+              sudo -u ubuntu git clone --branch master git@${GIT_ALIAS}:${GIT_REPO_PATH} "$WEB_DIR"
+            else
+              echo "Pulling latest changes..."
+              cd "$WEB_DIR"
+              sudo -u ubuntu git fetch origin
+              sudo -u ubuntu git checkout master
+              sudo -u ubuntu git reset --hard origin/master
+              sudo -u ubuntu git clean -fd
+            fi
+            find "$WEB_DIR" -type f -name "index.html" | while read -r htmlfile; do
+              dir="$(dirname "$htmlfile")"
+              if [ ! -f "$dir/index.php" ]; then
+                sudo cp "$htmlfile" "$dir/index.php"
+              fi
+            done
+            cd "$WEB_DIR"
+            DEPLOYED_COMMIT=$(sudo -u ubuntu git rev-parse --short HEAD || echo "unknown")
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - Deployed commit $DEPLOYED_COMMIT" | sudo tee -a "$LOG_FILE"
+            sudo chown -R www-data:www-data "$WEB_DIR"
+            sudo chmod -R 755 "$WEB_DIR"
+            sudo systemctl restart apache2 || true
+            sudo systemctl restart nginx || true
+            echo "Deployment finished (Commit: $DEPLOYED_COMMIT)"
