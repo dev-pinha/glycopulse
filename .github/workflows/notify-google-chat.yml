@@ -1,0 +1,82 @@
+name: Notify Google Chat on Deployment
+
+on:
+  workflow_run:
+    workflows: ["Deploy Multi-Server"]
+    types:
+      - completed
+
+env:
+  WEBHOOK_SECRET_NAME: "GOOGLE_CHAT_WEBHOOK"
+  ENVIRONMENT: "Production"
+  DEPLOY_WORKFLOW_NAME: "Deploy Multi-Server"
+
+jobs:
+  notify:
+    name: Send Google Chat Notification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send deployment status to Google Chat
+        env:
+          WEBHOOK_URL: ${{ secrets[env.WEBHOOK_SECRET_NAME] }}
+          STATUS: ${{ github.event.workflow_run.conclusion }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.event.workflow_run.actor.login }}
+          DEPLOY_WORKFLOW: ${{ env.DEPLOY_WORKFLOW_NAME }}
+          ENVIRONMENT: ${{ env.ENVIRONMENT }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          COMMIT_MESSAGE: ${{ github.event.workflow_run.head_commit.message }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_commit.id }}
+        run: |
+          set -e
+          echo "Preparing Google Chat notification..."
+          WEBHOOK_URL=$(echo "$WEBHOOK_URL" | tr -d '\r\n')
+          TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          COMMIT_MSG=$(echo "$COMMIT_MESSAGE" | tr '\n' ' ' | sed 's/"/\\"/g' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          COMMIT_SHORT=$(echo "$COMMIT_SHA" | cut -c1-7)
+          if [ "$STATUS" = "success" ]; then
+            COLOR="#34A853"
+            STATUS_ICON="✅"
+          elif [ "$STATUS" = "failure" ]; then
+            COLOR="#EA4335"
+            STATUS_ICON="❌"
+          else
+            COLOR="#FBBC04"
+            STATUS_ICON="⚠️"
+          fi
+          TEXT="${STATUS_ICON} *Deployment ${STATUS^^}* for *${REPO}*
+
+          *Triggered by:* ${ACTOR}
+
+          *Workflow:* ${DEPLOY_WORKFLOW}
+
+          *Environment:* ${ENVIRONMENT}
+
+          *Commit:* \`${COMMIT_SHORT}\`
+
+          *Commit Message:* ${COMMIT_MSG}
+
+          *Timestamp:* ${TIMESTAMP}
+
+          *Status:* ${STATUS^^}
+
+          [View Run](${RUN_URL})"
+          PAYLOAD=$(jq -n --arg text "$TEXT" --arg color "$COLOR" '{
+          cardsV2: [{
+          cardId: "deployment-status",
+          card: {
+          header: { title: "GitHub Deployment Notification" },
+          sections: [{
+          widgets: [{
+          textParagraph: { text: $text }
+          }]
+          }]
+          }
+          }]
+          }')
+          echo "Sending message to Google Chat..."
+          curl -s -o /dev/null -w "%{http_code}" \
+          -H 'Content-Type: application/json' \
+          -d "$PAYLOAD" \
+          "$WEBHOOK_URL" || echo "Failed to send notification"
+          echo "Notification sent (${STATUS^^})"
