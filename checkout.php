@@ -1,5 +1,5 @@
 <?php
-// Checkout Redirect Logic
+session_start();
 
 $package = $_GET['pkg'] ?? '';
 
@@ -12,6 +12,18 @@ $products = [
 
 if (array_key_exists($package, $products)) {
     $url = $products[$package];
+
+    // Forward incoming traffic params as DS24 campaign key
+    if (!empty($_SESSION['cam'])) {
+        // Sanitize: only alphanumeric, underscores, hyphens allowed
+        $cam = str_replace(['=', '&'], ['_', '-'], $_SESSION['cam']);
+        $cam = preg_replace('/[^A-Za-z0-9_\-]/', '', $cam);
+        $cam = substr($cam, 0, 127);
+        if ($cam !== '') {
+            $url .= '&cam=' . $cam;
+        }
+    }
+
     header("Location: $url", true, 302);
     exit();
 } else {

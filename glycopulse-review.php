@@ -1,4 +1,10 @@
-<?php $year = date("Y"); ?>
+<?php
+session_start();
+if (!empty($_SERVER['QUERY_STRING'])) {
+    $_SESSION['cam'] = $_SERVER['QUERY_STRING'];
+}
+$year = date("Y");
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
