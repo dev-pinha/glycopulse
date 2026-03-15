@@ -13,16 +13,16 @@ $products = [
 if (array_key_exists($package, $products)) {
     $url = $products[$package];
 
-    // Forward incoming traffic params as DS24 campaign key
+    // DS24 campaign key: "gs" prefix for branded page, with traffic params appended
+    $cam = 'gs';
     if (!empty($_SESSION['cam'])) {
-        // Sanitize: only alphanumeric, underscores, hyphens allowed
-        $cam = str_replace(['=', '&'], ['_', '-'], $_SESSION['cam']);
-        $cam = preg_replace('/[^A-Za-z0-9_\-]/', '', $cam);
-        $cam = substr($cam, 0, 127);
-        if ($cam !== '') {
-            $url .= '&cam=' . $cam;
+        $extra = str_replace(['=', '&'], ['_', '-'], $_SESSION['cam']);
+        $extra = preg_replace('/[^A-Za-z0-9_\-]/', '', $extra);
+        if ($extra !== '') {
+            $cam .= '-' . $extra;
         }
     }
+    $url .= '&cam=' . substr($cam, 0, 127);
 
     header("Location: $url", true, 302);
     exit();
